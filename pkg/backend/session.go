@@ -30,11 +30,6 @@ type session struct {
 	msg      *mail.Message
 }
 
-// AuthPlain implements smtp.Session.
-func (*session) AuthPlain(username string, password string) error {
-	return nil
-}
-
 // Logout implements smtp.Session.
 func (*session) Logout() error {
 	return nil

@@ -71,7 +71,6 @@ func main() {
 	// create lmtpd server
 	s := smtp.NewServer(backend)
 	s.LMTP = true
-	s.AuthDisabled = true
 	s.ReadTimeout = time.Minute
 	s.Domain = *autoreplyDomain
 
