@@ -139,13 +139,15 @@ func (b *backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 	}, nil
 }
 
-// extractAddress extracts looks for address in listed fields, and
+// extractAddress looks for address in listed fields, and
 // returns full string on match, otherwise just the original address
 func extractAddress(msg *mail.Message, address string, fields ...string) string {
 	for _, f := range fields {
 		if addrs, err := msg.Header.AddressList(f); err == nil {
-			if len(addrs) > 0 && addrs[0].Address == address {
-				return addrs[0].String()
+			for _, addr := range addrs {
+				if addr.Address == address {
+					return addr.String()
+				}
 			}
 		}
 	}
