@@ -2,8 +2,6 @@ package ratelimiter
 
 import (
 	"context"
-	"crypto/sha256"
-	"fmt"
 	"sync"
 	"time"
 
@@ -14,30 +12,38 @@ import (
 func New(d time.Duration) interfaces.RateLimiter {
 	return &ratelimiter{
 		d:     d,
-		inch:  make(chan string),
-		track: make(map[string]bool),
+		inch:  make(chan *elemkey),
+		track: make(map[elemkey]bool),
 	}
+}
+
+type elemkey struct {
+	from string
+	to   string
 }
 
 type expireelem struct {
 	when time.Time
-	key  string
+	key  *elemkey
 	next *expireelem
 }
 
 type ratelimiter struct {
 	d time.Duration
 
-	inch chan string
+	inch chan *elemkey
 
 	lock       sync.Mutex
-	track      map[string]bool
+	track      map[elemkey]bool
 	expirehead *expireelem
 	expiretail *expireelem
 }
 
 func (r *ratelimiter) Ratelimit(from, to string) bool {
-	key := mapKey(from, to)
+	key := elemkey{
+		from: from,
+		to:   to,
+	}
 
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -46,53 +52,41 @@ func (r *ratelimiter) Ratelimit(from, to string) bool {
 		return false
 	}
 
-	r.inch <- key
+	r.inch <- &key
 
 	return true
 }
 
 func (r *ratelimiter) Run(ctx context.Context) {
-	var tm *time.Timer
+	tm := time.NewTimer(0)
 
 	for {
-		if tm == nil {
-			select {
-			case <-ctx.Done():
-				return
-			case key := <-r.inch:
-				r.add(key)
-				tm = time.NewTimer(time.Until(r.expirehead.when))
+		select {
+		case <-ctx.Done():
+			return
+		case key := <-r.inch:
+			r.add(key)
+		case <-tm.C:
+			n := time.Now()
+			for e := r.expirehead; e != nil && e.when.Before(n); e = r.expirehead {
+				r.pop()
 			}
-		} else {
-			select {
-			case <-ctx.Done():
-				return
-			case key := <-r.inch:
-				r.add(key)
-			case <-tm.C:
-				n := time.Now()
-				for e := r.expirehead; e != nil && e.when.Before(n); e = r.expirehead {
-					r.pop()
-				}
-				if r.expirehead != nil {
-					tm = time.NewTimer(time.Until(r.expirehead.when))
-				} else {
-					tm = nil
-				}
+			if r.expirehead != nil {
+				tm.Reset(time.Until(r.expirehead.when))
 			}
 		}
 	}
 }
 
-func (r *ratelimiter) add(key string) {
+func (r *ratelimiter) add(key *elemkey) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	if r.track[key] {
+	if r.track[*key] {
 		return
 	}
 
-	r.track[key] = true
+	r.track[*key] = true
 
 	e := &expireelem{
 		when: time.Now().Add(r.d),
@@ -118,11 +112,5 @@ func (r *ratelimiter) pop() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	delete(r.track, e.key)
-}
-
-func mapKey(from, to string) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s@@%s", from, to)))
-
-	return string(sum[:])
+	delete(r.track, *e.key)
 }
