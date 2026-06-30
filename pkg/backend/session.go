@@ -14,11 +14,9 @@ import (
 
 var (
 	fromRe = regexp.MustCompile("^[^@]+@[^@]+$")
-	rcptRe = regexp.MustCompile("^([^#]+)#([^@]+)@([^@]+)$")
 
-	errInvalidFrom       = errors.New("invalid from address")
-	errInvalidRcpt       = errors.New("invalid rcpt address")
-	errInvalidRcptDomain = errors.New("invalid rcpt domain")
+	errInvalidFrom = errors.New("invalid from address")
+	errInvalidRcpt = errors.New("invalid rcpt address")
 )
 
 type session struct {
@@ -52,13 +50,9 @@ func (s *session) Mail(from string, opts *smtp.MailOptions) error {
 
 // Add recipient for currently processed message.
 func (s *session) Rcpt(to string, opts *smtp.RcptOptions) error {
-	m := rcptRe.FindStringSubmatch(to)
+	m := s.backend.rcptre.FindStringSubmatch(to)
 	if m == nil {
 		return errInvalidRcpt
-	}
-
-	if m[3] != s.backend.domain {
-		return errInvalidRcptDomain
 	}
 
 	s.rcptreal[to] = fmt.Sprintf("%s@%s", m[1], m[2])

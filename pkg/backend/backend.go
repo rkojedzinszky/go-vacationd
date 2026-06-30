@@ -54,9 +54,14 @@ var (
 
 // New creates a backend accepting mails for vacation domain over lmtp. When sending replies, smtp server at server:port is contacted.
 // Ratelimiter limits rate of sending replies. Replygenerator generates reply body message.
-func New(domain string, smtpserver string, smtpport int, ratelimiter interfaces.RateLimiter, replygenerator interfaces.ReplyGenerator) (smtp.Backend, error) {
+func New(domain, delimiter string, smtpserver string, smtpport int, ratelimiter interfaces.RateLimiter, replygenerator interfaces.ReplyGenerator) (smtp.Backend, error) {
+	rcptre, err := regexp.Compile(fmt.Sprintf("^(.+)%s([^@]+)@%s$", regexp.QuoteMeta(delimiter), regexp.QuoteMeta(domain)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile regexp for domain %s: %w", domain, err)
+	}
+
 	return &backend{
-		domain:         domain,
+		rcptre:         rcptre,
 		server:         smtpserver,
 		port:           smtpport,
 		ratelimiter:    ratelimiter,
@@ -65,7 +70,7 @@ func New(domain string, smtpserver string, smtpport int, ratelimiter interfaces.
 }
 
 type backend struct {
-	domain         string
+	rcptre         *regexp.Regexp
 	server         string
 	port           int
 	ratelimiter    interfaces.RateLimiter

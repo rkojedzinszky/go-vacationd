@@ -25,10 +25,11 @@ import (
 )
 
 var (
-	autoreplyDomain   = flag.String("autoreply-domain", "autoreply", "Domain used to receive mails subject to auto-reply")
-	lmtpListenAddress = flag.String("lmtp-listen-address", ":1025", "LMTP listen address")
-	smtpServerAddress = flag.String("smtp-server-address", "", "SMTP Address used to send replies")
-	smtpServerPort    = flag.Int("smtp-server-port", 25, "SMTP Port used to send replies")
+	autoreplyDomain    = flag.String("autoreply-domain", "vacation.invalid", "Domain used to receive mails subject to auto-reply")
+	autoreplyDelimiter = flag.String("autoreply-delim", "#", "Delimiter used in auto-reply addresses")
+	lmtpListenAddress  = flag.String("lmtp-listen-address", ":1025", "LMTP listen address")
+	smtpServerAddress  = flag.String("smtp-server-address", "", "SMTP Address used to send replies")
+	smtpServerPort     = flag.Int("smtp-server-port", 25, "SMTP Port used to send replies")
 
 	postfixAdminDSN = flag.String("postfixadmin-dsn", "", "Database DSN to use with postfixadmin replygenerator")
 
@@ -63,7 +64,7 @@ func main() {
 	}
 
 	// create backend
-	backend, err := backend.New(*autoreplyDomain, *smtpServerAddress, *smtpServerPort, rl, rg)
+	backend, err := backend.New(*autoreplyDomain, *autoreplyDelimiter, *smtpServerAddress, *smtpServerPort, rl, rg)
 	if err != nil {
 		log.Fatal(err)
 	}
