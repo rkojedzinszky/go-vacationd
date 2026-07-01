@@ -115,7 +115,7 @@ func (b *backend) handleMailSingle(ctx context.Context, msg *mail.Message, sende
 	}
 
 	// Generate reply
-	reply, err := b.GenerateReply(ctx, sender, recipient, msg)
+	reply, err := b.GenerateReply(ctx, &sender, recipient, msg)
 	if err != nil {
 		return
 	}
@@ -162,7 +162,7 @@ func extractAddress(msg *mail.Message, address string, fields ...string) string 
 
 // GenerateReply takes original envelope from/rcpt and message
 func (b *backend) GenerateReply(ctx context.Context,
-	originalEnvelopeSender,
+	sender *string,
 	originalEnvelopeRecipient string,
 	msg *mail.Message) (m *gomail.Msg, err error) {
 	m = gomail.NewMsg(gomail.WithCharset(gomail.CharsetUTF8))
@@ -172,7 +172,10 @@ func (b *backend) GenerateReply(ctx context.Context,
 		return
 	}
 
-	if err = m.To(extractAddress(msg, originalEnvelopeSender, gomail.HeaderFrom.String())); err != nil {
+	if from, err := msg.Header.AddressList(gomail.HeaderFrom.String()); err == nil && len(from) > 0 {
+		*sender = from[0].String()
+	}
+	if err = m.To(*sender); err != nil {
 		return
 	}
 
@@ -211,7 +214,7 @@ func (b *backend) GenerateReply(ctx context.Context,
 
 	// Generate/alter reply
 	if b.replygenerator != nil {
-		m, err = b.replygenerator.GenerateReplyBody(ctx, msg, originalEnvelopeSender, originalEnvelopeRecipient, m)
+		m, err = b.replygenerator.GenerateReplyBody(ctx, msg, *sender, originalEnvelopeRecipient, m)
 	} else {
 		m.SetBodyString(gomail.TypeTextPlain, "Reader of mailbox is out-of-office / on vacation")
 	}
