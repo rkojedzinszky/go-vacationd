@@ -71,9 +71,9 @@ func (r *ratelimiter) Run(ctx context.Context) {
 			for e := r.expirehead; e != nil && e.when.Before(n); e = r.expirehead {
 				r.pop()
 			}
-			if r.expirehead != nil {
-				tm.Reset(time.Until(r.expirehead.when))
-			}
+		}
+		if r.expirehead != nil {
+			tm.Reset(time.Until(r.expirehead.when))
 		}
 	}
 }
