@@ -102,30 +102,40 @@ func (b *backend) handleMail(ctx context.Context, msg *mail.Message, sender stri
 }
 
 func (b *backend) handleMailSingle(ctx context.Context, msg *mail.Message, sender string, recipient string) (err error) {
+	// Extract original sender from From: header
+	var fromAddr, fromString string
+	if from, err := msg.Header.AddressList(gomail.HeaderFrom.String()); err == nil && len(from) > 0 {
+		fromString = from[0].String()
+		fromAddr = from[0].Address
+	} else {
+		fromAddr = sender
+		fromString = sender
+	}
+
 	// Check if addressed to mailbox
 	if !isMessageAddressedTo(msg, recipient) {
-		log.Printf("Not generating reply for message <%s> -> <%s>: not addressed to us", sender, recipient)
+		log.Printf("Not generating reply for message <%s> -> <%s>: not addressed to us", fromAddr, recipient)
 		return nil
 	}
 
 	// Do rate-limiting
-	if !b.ratelimiter.Ratelimit(recipient, sender) {
-		log.Printf("Not generating reply for message <%s> -> <%s>: rate-limited", sender, recipient)
+	if !b.ratelimiter.Ratelimit(recipient, fromAddr) {
+		log.Printf("Not generating reply for message <%s> -> <%s>: rate-limited", fromAddr, recipient)
 		return
 	}
 
 	// Generate reply
-	reply, err := b.GenerateReply(ctx, &sender, recipient, msg)
+	reply, err := b.GenerateReply(ctx, fromString, fromAddr, recipient, msg)
 	if err != nil {
 		return
 	}
 
 	if reply == nil {
-		log.Printf("Not sending reply for message <%s> -> <%s>: empty response from replygenerator", sender, recipient)
+		log.Printf("Not sending reply for message <%s> -> <%s>: empty response from replygenerator", fromAddr, recipient)
 		return
 	}
 
-	log.Printf("Sending reply for message <%s> -> <%s>", sender, recipient)
+	log.Printf("Sending reply for message <%s> -> <%s>", fromAddr, recipient)
 
 	c, err := gomail.NewClient(b.server, gomail.WithPort(b.port), gomail.WithTLSPolicy(gomail.NoTLS))
 	if err != nil {
@@ -162,7 +172,8 @@ func extractAddress(msg *mail.Message, address string, fields ...string) string 
 
 // GenerateReply takes original envelope from/rcpt and message
 func (b *backend) GenerateReply(ctx context.Context,
-	sender *string,
+	fromString string,
+	fromAddr string,
 	originalEnvelopeRecipient string,
 	msg *mail.Message) (m *gomail.Msg, err error) {
 	m = gomail.NewMsg(gomail.WithCharset(gomail.CharsetUTF8))
@@ -172,10 +183,7 @@ func (b *backend) GenerateReply(ctx context.Context,
 		return
 	}
 
-	if from, err := msg.Header.AddressList(gomail.HeaderFrom.String()); err == nil && len(from) > 0 {
-		*sender = from[0].String()
-	}
-	if err = m.To(*sender); err != nil {
+	if err = m.To(fromString); err != nil {
 		return
 	}
 
@@ -214,7 +222,7 @@ func (b *backend) GenerateReply(ctx context.Context,
 
 	// Generate/alter reply
 	if b.replygenerator != nil {
-		m, err = b.replygenerator.GenerateReplyBody(ctx, msg, *sender, originalEnvelopeRecipient, m)
+		m, err = b.replygenerator.GenerateReplyBody(ctx, msg, fromAddr, originalEnvelopeRecipient, m)
 	} else {
 		m.SetBodyString(gomail.TypeTextPlain, "Reader of mailbox is out-of-office / on vacation")
 	}
